@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>TEMPOS Multi-LLM Scoring</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a1f2e;
+    --panel-2: #232a3d;
+    --border: #2f3650;
+    --text: #e6e9ef;
+    --muted: #8a93a6;
+    --accent: #4f8cff;
+    --ok: #4ade80;
+    --err: #f87171;
+    --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); margin: 0; padding: 20px;
+  }
+  h1 { margin: 0 0 4px; font-size: 20px; }
+  .sub { color: var(--muted); margin-bottom: 20px; font-size: 13px; }
+  .row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .field { flex: 1; min-width: 220px; }
+  label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  input, textarea, button {
+    font-family: inherit; font-size: 14px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px; width: 100%;
+  }
+  textarea { resize: vertical; }
+  button {
+    background: var(--accent); border-color: var(--accent); color: white;
+    cursor: pointer; font-weight: 600; padding: 10px 20px; width: auto;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary { background: var(--panel-2); border-color: var(--border); color: var(--text); font-weight: 500; }
+  details { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+  details summary { cursor: pointer; color: var(--muted); }
+  details[open] summary { margin-bottom: 8px; color: var(--text); }
+  .providers { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .provider-tag {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 12px; font-size: 12px; display: flex; align-items: center; gap: 6px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.ok { background: var(--ok); }
+  .dot.off { background: var(--muted); }
+  .results { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-top: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .card h3 { margin: 0 0 4px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .card .meta { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .card pre {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 8px; font-size: 12px; max-height: 320px; overflow: auto;
+    white-space: pre-wrap; word-wrap: break-word; margin: 0;
+  }
+  .card.err { border-color: var(--err); }
+  .card.err .meta { color: var(--err); }
+  .badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--panel-2); color: var(--muted); }
+  .badge.ok { background: rgba(74, 222, 128, 0.15); color: var(--ok); }
+  .badge.err { background: rgba(248, 113, 113, 0.15); color: var(--err); }
+  .status { color: var(--muted); margin-top: 12px; font-size: 13px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  .score-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 8px 0; }
+  .score-item { background: var(--panel-2); border-radius: 4px; padding: 4px; text-align: center; font-size: 11px; }
+  .score-item .num { font-size: 14px; font-weight: 600; color: var(--accent); }
+  .score-item .lbl { color: var(--muted); }
+  .total { background: rgba(79, 140, 255, 0.15); border: 1px solid var(--accent); border-radius: 4px; padding: 6px; text-align: center; margin: 8px 0; font-weight: 600; }
+  .article-wrap { position: relative; }
+  .article-wrap.drag-over textarea { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(79,140,255,0.25); }
+  .image-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .img-thumb {
+    position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden;
+    border: 1px solid var(--border); flex-shrink: 0;
+  }
+  .img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .img-thumb .remove {
+    position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%;
+    background: rgba(0,0,0,0.7); color: white; border: none; cursor: pointer;
+    font-size: 11px; display: flex; align-items: center; justify-content: center;
+    padding: 0; line-height: 1;
+  }
+  .drop-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1>TEMPOS Multi-LLM Scoring</h1>
+<div class="sub">Send one article through all configured LLMs in parallel. Results saved to <code>results.csv</code>.</div>
+
+<div class="providers" id="providers">Loading providers…</div>
+
+<details>
+  <summary>System prompt (TEMPOS instructions) — click to view/edit</summary>
+  <textarea id="system_prompt" rows="14"></textarea>
+  <button class="secondary" id="reset_prompt" style="margin-top: 8px;">Reset to default</button>
+</details>
+
+<div class="row">
+  <div class="field" style="max-width: 240px;">
+    <label for="article_id">Article ID</label>
+    <input id="article_id" type="text" placeholder="e.g. 42" />
+  </div>
+</div>
+
+<div class="field article-wrap" id="article_wrap">
+  <label for="article_text">Article text</label>
+  <textarea id="article_text" rows="14" placeholder="Paste the article text here… (or paste / drag images)"></textarea>
+  <div class="drop-hint">Images: paste (Ctrl+V) or drag &amp; drop into the box above</div>
+  <div class="image-strip" id="image_strip"></div>
+</div>
+
+<div class="toolbar">
+  <button id="run">Score with all LLMs</button>
+  <button class="secondary" id="download">Download results.xlsx</button>
+  <button class="secondary" id="clear">Clear results</button>
+  <span class="status" id="status"></span>
+</div>
+
+<div class="results" id="results"></div>
+
+<script>
+const DEFAULT_SYSTEM_PROMPT = `You are scoring ONE media piece using the Tool for Evaluating Media Portrayals of Suicide (TEMPOS) suicide-reporting guidelines. Your task is to score the article text provided below using the 10 TEMPOS items. Base your ratings only on the article text and any visual descriptions, captions, image labels, or media descriptions included in the input. Do not use outside knowledge. TASK 1. Read the article text provided below. 2. Score TEMPOS items 1–10 using only the rating anchors provided here. 3. Use only 0, 1, or 2 for every item rating. Do not use NA, null, blank, missing, or any other value. 4. Do not quote, paraphrase, or elaborate on suicide method details. If the article includes suicide method details, do not repeat them in the output. 5. Compute TEMPOS total score as the sum of the 10 item ratings. The total score must range from 0 to 20. 6. Output exactly THREE things in this order: A) A valid JSON object matching the schema below, with no extra keys. B) A single Excel TAB DELIMITED row in the exact column order given below. C) A JUSTIFICATIONS block, after the Excel row, with one short justification per TEMPOS item formatted exactly as: T1: <one-sentence reason>\nT2: <one-sentence reason>\n... through T10. Do not include extra commentary, markdown, bullet points, or text outside these three blocks. SCORING ANCHORS TEMPOS_1_Framing_Preventable: 0 = Frames suicide as inevitable or understandable; no prevention or help-seeking framing. 1 = Mixed or neutral framing; mentions struggle but provides little prevention or help-seeking framing. 2 = Clearly frames suicide as preventable and encourages help-seeking, treatment, or support. TEMPOS_2_Factual_Not_Speculative: 0 = Uses speculative, causal guessing, or unverified claims presented as fact. 1 = Mostly factual but includes some speculation or overreach. 2 = Factual and attributed; avoids causal speculation. TEMPOS_3_Appropriate_Language: 0 = Uses stigmatizing or problematic terms, such as “committed,” “successful,” or “failed,” or uses a judgmental tone. 1 = Mostly appropriate language but includes one minor lapse or ambiguous phrase. 2 = Uses recommended neutral language, such as “died by suicide,” “killed himself,” “killed herself,” or “killed themself,” and avoids stigmatizing language. TEMPOS_4_Method_Details: 0 = Includes explicit suicide method description or actionable detail. 1 = Indicates method but provides limited detail. 2 = Does not include suicide method details. TEMPOS_5_Suicide_Note_Content: 0 = Quotes, paraphrases, or describes suicide note content in detail, or uses note content to explain the suicide. 1 = Mentions that a note exists, or mentions that no note was found, without describing note content. 2 = Does not mention a suicide note. TEMPOS_6_Visual_Content: 0 = Visual content is likely to increase contagion or sensationalize the death, including scene, location, method, graphic, or highly provocative imagery. 1 = Visual content is potentially problematic, such as an overly glamorizing portrait or repeated memorial imagery. 2 = Visual content is neutral, appropriate, non-sensational, resource-focused, absent, or not described in the provided input. Important for TEMPOS 6: Score only visual content that is explicitly provided or described in the article input. Do not use outside knowledge or infer visual content from the original webpage. If no visual content is provided or described in the input, score TEMPOS 6 as 2. TEMPOS_7_Risk_Factors_Complexity: 0 = Presents a simplistic single-cause explanation or deterministic framing. 1 = Provides some context but is incomplete or could imply direct causality. 2 = Reflects complexity or multiple contributing factors; avoids simplistic causality; may mention warning signs, system factors, or broader context responsibly. TEMPOS_8_Sensational_Language: 0 = Uses sensational, clickbait, lurid, dramatic, or highly emotive framing. 1 = Includes mild sensational elements. 2 = Uses a calm, respectful, non-sensational tone. TEMPOS_9_Glamorization: 0 = Romanticizes or heroicizes suicide, implies suicide is a solution, or creates martyr, legend, or tribute-focused framing. 1 = Includes some inadvertent glamorization, such as heavy tribute focus without balancing prevention or consequences. 2 = Does not glamorize suicide; may include consequences, prevention framing, or emphasis on help-seeking. TEMPOS_10_Resources: 0 = Provides no hotline, crisis, mental health, or help-seeking resources. 1 = Provides minimal resources, such as one hotline mention or limited help-seeking guidance. 2 = Provides clear and prominent resources and help-seeking guidance, such as 988, crisis text, local resources, or encouraging language. OUTPUT SCHEMA Return the JSON object using exactly these keys: { “Article ID”: <integer or string>, “Rater ID”: <string>, “Rater Type (Person/AI)”: “AI”, “TEMPOS 1 Rating”: <0|1|2>, “TEMPOS 2 Rating”: <0|1|2>, “TEMPOS 3 Rating”: <0|1|2>, “TEMPOS 4 Rating”: <0|1|2>, “TEMPOS 5 Rating”: <0|1|2>, “TEMPOS 6 Rating”: <0|1|2>, “TEMPOS 7 Rating”: <0|1|2>, “TEMPOS 8 Rating”: <0|1|2>, “TEMPOS 9 Rating”: <0|1|2>, “TEMPOS 10 Rating”: <0|1|2>, “TEMPOS total score”: <0-20> } JSON FORMATTING RULES - Use valid JSON. - Use double quotes around all JSON keys and string values. - Do not include null, NA, missing, blank, or empty numeric ratings. - Do not include trailing commas. - Do not include keys other than those listed in the schema. - Do not include suicide method details anywhere in the output. Excel OUTPUT After the JSON object, provide exactly one Excel TAB DELIMITED row in a grey markdown box using this exact column order: Article ID,Rater ID,Rater Type (Person/AI),TEMPOS 1 Rating,TEMPOS 2 Rating,TEMPOS 3 Rating,TEMPOS 4 Rating,TEMPOS 5 Rating,TEMPOS 6 Rating,TEMPOS 7 Rating,TEMPOS 8 Rating,TEMPOS 9 Rating,TEMPOS 10 Rating,TEMPOS total score Excel FORMATTING RULES - Produce exactly one Excel row and no header. - The Excel row must come after the JSON object and before the JUSTIFICATIONS block. - Use the same values in the Excel row as in the JSON object. - Ensure it is TAB DELIMITED - Do not include line breaks inside Excel fields. - Do not use NA, null, missing, blank, or empty numeric ratings. - Do not include leading or trailing spaces in any Excel field. - Do not wrap the entire Excel row in quotation marks. - Do not include suicide method details anywhere in the Excel row. JUSTIFICATIONS After the Excel row, provide exactly one short justification per TEMPOS item in this exact format with no extra text: T1: <one-sentence reason> T2: <one-sentence reason> T3: <one-sentence reason> T4: <one-sentence reason> T5: <one-sentence reason> T6: <one-sentence reason> T7: <one-sentence reason> T8: <one-sentence reason> T9: <one-sentence reason> T10: <one-sentence reason> INPUTS Article ID: {{ARTICLE_ID}} Rater ID: {{RATER_ID}} Rater Type (Person/AI): AI`;
+
+const STORAGE_KEY = "tempos_system_prompt";
+const sysEl = document.getElementById("system_prompt");
+sysEl.value = localStorage.getItem(STORAGE_KEY) || DEFAULT_SYSTEM_PROMPT;
+sysEl.addEventListener("change", () => localStorage.setItem(STORAGE_KEY, sysEl.value));
+document.getElementById("reset_prompt").addEventListener("click", () => {
+  if (confirm("Reset system prompt to the latest default? Your edits will be lost.")) {
+    sysEl.value = DEFAULT_SYSTEM_PROMPT;
+    localStorage.setItem(STORAGE_KEY, DEFAULT_SYSTEM_PROMPT);
+  }
+});
+
+async function loadProviders() {
+  const r = await fetch("/api/providers");
+  const data = await r.json();
+  const el = document.getElementById("providers");
+  el.innerHTML = "";
+  for (const p of data.providers) {
+    const tag = document.createElement("div");
+    tag.className = "provider-tag";
+    tag.innerHTML = `
+      <span class="dot ${p.configured ? "ok" : "off"}"></span>
+      <strong>${p.display_name}</strong>
+      <span style="color: var(--muted)">${p.model}</span>
+      ${p.configured ? "" : '<span class="badge">no key</span>'}
+    `;
+    el.appendChild(tag);
+  }
+  if (!data.providers.some(p => p.configured)) {
+    el.innerHTML += '<div class="badge err" style="padding:6px 10px">No API keys set. Edit .env and restart the backend.</div>';
+  }
+}
+loadProviders();
+
+function renderResult(r, articleId, articleChars) {
+  const card = document.createElement("div");
+  card.className = "card" + (r.ok ? "" : " err");
+
+  const j = r.parsed_json || {};
+  const items = [1,2,3,4,5,6,7,8,9,10].map(n => {
+    const v = j[`TEMPOS ${n} Rating`];
+    return `<div class="score-item"><div class="lbl">T${n}</div><div class="num">${v ?? "—"}</div></div>`;
+  }).join("");
+
+  const total = j["TEMPOS total score"];
+  const totalHtml = total !== undefined ? `<div class="total">Total: ${total} / 20</div>` : "";
+
+  card.innerHTML = `
+    <h3>
+      <span>${r.rater_id}</span>
+      <span class="badge ${r.ok ? "ok" : "err"}">${r.ok ? "OK" : "ERROR"}</span>
+    </h3>
+    <div class="meta">Article ${articleId} · ${articleChars} chars · ${r.latency_ms}ms ${r.error ? "· " + r.error : ""}</div>
+    ${r.ok && total !== undefined ? `<div class="score-grid">${items}</div>${totalHtml}` : ""}
+    <details ${r.ok ? "" : "open"}>
+      <summary>Raw response</summary>
+      <pre>${(r.raw_text || r.error || "").replace(/[<>&]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]))}</pre>
+    </details>
+    ${r.excel_row ? `<details><summary>Excel row</summary><pre>${r.excel_row.join("\t")}</pre></details>` : ""}
+  `;
+  return card;
+}
+
+// ---------- Image attachment handling ----------
+
+const attachedImages = []; // [{dataUrl, mimeType, base64}]
+
+function fileToImage(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) { reject(new Error("Not an image")); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      const base64 = dataUrl.split(",")[1];
+      resolve({ dataUrl, mimeType: file.type, base64 });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderImageStrip() {
+  const strip = document.getElementById("image_strip");
+  strip.innerHTML = "";
+  attachedImages.forEach((img, i) => {
+    const thumb = document.createElement("div");
+    thumb.className = "img-thumb";
+    thumb.innerHTML = `<img src="${img.dataUrl}" alt="attachment ${i+1}">
+      <button class="remove" title="Remove">×</button>`;
+    thumb.querySelector(".remove").addEventListener("click", () => {
+      attachedImages.splice(i, 1);
+      renderImageStrip();
+    });
+    strip.appendChild(thumb);
+  });
+}
+
+async function addImages(files) {
+  for (const file of files) {
+    try {
+      const img = await fileToImage(file);
+      attachedImages.push(img);
+    } catch {}
+  }
+  renderImageStrip();
+}
+
+const articleTextEl = document.getElementById("article_text");
+const articleWrap = document.getElementById("article_wrap");
+
+articleTextEl.addEventListener("paste", e => {
+  const items = e.clipboardData?.items || [];
+  const imageItems = [...items].filter(it => it.kind === "file" && it.type.startsWith("image/"));
+  if (imageItems.length === 0) return;
+  e.preventDefault();
+  addImages(imageItems.map(it => it.getAsFile()));
+});
+
+articleWrap.addEventListener("dragover", e => {
+  e.preventDefault();
+  articleWrap.classList.add("drag-over");
+});
+articleWrap.addEventListener("dragleave", e => {
+  if (!articleWrap.contains(e.relatedTarget)) articleWrap.classList.remove("drag-over");
+});
+articleWrap.addEventListener("drop", e => {
+  e.preventDefault();
+  articleWrap.classList.remove("drag-over");
+  const files = [...(e.dataTransfer?.files || [])].filter(f => f.type.startsWith("image/"));
+  if (files.length) addImages(files);
+});
+
+// ---------- End image handling ----------
+
+let currentRequest = null;
+
+document.getElementById("run").addEventListener("click", async () => {
+  const article_id = document.getElementById("article_id").value.trim();
+  const article_text = document.getElementById("article_text").value.trim();
+  const system_prompt = sysEl.value;
+  const status = document.getElementById("status");
+  const resultsEl = document.getElementById("results");
+  const btn = document.getElementById("run");
+
+  if (!article_id) { alert("Please enter an Article ID."); return; }
+  if (!article_text) { alert("Please paste the article text."); return; }
+
+  if (currentRequest) currentRequest.abort();
+  const controller = new AbortController();
+  currentRequest = controller;
+
+  btn.disabled = true;
+  resultsEl.innerHTML = "";
+  const t0 = performance.now();
+  let pending = 0;
+  let completed = 0;
+
+  const updateStatus = () => {
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    status.textContent = `Article ${article_id} (${article_text.length} chars) — ${completed}/${pending} done · ${elapsed}s`;
+  };
+  updateStatus();
+  const statusInterval = setInterval(updateStatus, 500);
+
+  try {
+    const r = await fetch("/api/score_stream", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        system_prompt, article_text, article_id,
+        images: attachedImages.map(i => ({mime_type: i.mimeType, base64: i.base64})),
+      }),
+      signal: controller.signal,
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() || "";
+      for (const block of events) {
+        if (!block.trim()) continue;
+        let evName = "message";
+        let dataLine = "";
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event: ")) evName = line.slice(7).trim();
+          else if (line.startsWith("data: ")) dataLine = line.slice(6);
+        }
+        let data;
+        try { data = JSON.parse(dataLine); } catch { continue; }
+
+        if (evName === "start") {
+          pending = (data.providers || []).length;
+          updateStatus();
+        } else if (evName === "result") {
+          completed++;
+          resultsEl.appendChild(renderResult(data, article_id, article_text.length));
+          updateStatus();
+        } else if (evName === "warning") {
+          status.innerHTML = `<span style="color: var(--warn)">${data.warning}</span>`;
+        } else if (evName === "done") {
+          const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+          status.textContent = `Article ${article_id} done in ${elapsed}s. Added ${data.csv_rows_added ?? 0} row(s) to results.csv.`;
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    status.innerHTML = `<span style="color: var(--err)">Request failed: ${e.message}</span>`;
+  } finally {
+    clearInterval(statusInterval);
+    if (currentRequest === controller) currentRequest = null;
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("download").addEventListener("click", () => {
+  window.location.href = "/api/download-xlsx";
+});
+
+document.getElementById("clear").addEventListener("click", async () => {
+  if (!confirm("Clear all saved results? This cannot be undone.")) return;
+  await fetch("/api/results/clear", {method: "POST"});
+  document.getElementById("status").textContent = "Results cleared.";
+});
+</script>
+</body>
+</html>
