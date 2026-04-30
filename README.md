@@ -31,18 +31,18 @@ For each, you'll: sign in → "Create API key" → copy the key (starts with `sk
 2. Paste the **article text** into the big text box
 3. Click **Score with all LLMs**
 4. Each LLM's response appears in its own card with the parsed scores. The Excel rows are appended to `results.csv` automatically.
-5. Click **Download results.csv** to grab the accumulated CSV.
+5. Click **Download results.xlsx** to grab the accumulated results as an Excel file.
 
-The `Rater ID` is automatically set to `<LLM Name> (<model>)` — e.g. `ChatGPT (gpt-4o)`, `Claude (claude-opus-4-7)`.
+The `Rater ID` is automatically set to `<LLM Name> (<model>)` — e.g. `ChatGPT (gpt-5.5)`, `Claude (claude-opus-4-7)`.
 
 ## Customizing models
 
 By default the app uses:
-- OpenAI: `gpt-4o`
+- OpenAI: `gpt-5.5`
 - Anthropic: `claude-opus-4-7`
-- xAI: `grok-2-latest`
-- DeepSeek: `deepseek-chat`
-- Google: `gemini-2.0-flash`
+- xAI: `grok-4-fast-reasoning`
+- DeepSeek: `deepseek-v4-pro`
+- Google: `gemini-3.1-pro-preview`
 
 To override, set e.g. `OPENAI_MODEL=gpt-4-turbo` in your `.env`.
 
